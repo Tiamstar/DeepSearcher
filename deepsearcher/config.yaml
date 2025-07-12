@@ -1,14 +1,14 @@
 provide_settings:
   llm:
-    provider: "OpenAI"
-    config:
-      model: "o1-mini"
+    # provider: "OpenAI"
+    # config:
+    #   model: "o1-mini"
 #      api_key: "sk-xxxx"  # Uncomment to override the `OPENAI_API_KEY` set in the environment variable
 #      base_url: ""
 
-#    provider: "DeepSeek"
-#    config:
-#      model: "deepseek-reasoner"
+   provider: "DeepSeek"
+   config:
+     model: "deepseek-reasoner"
 ##      api_key: "sk-xxxx"  # Uncomment to override the `DEEPSEEK_API_KEY` set in the environment variable
 ##      base_url: ""
 
@@ -47,9 +47,9 @@ provide_settings:
 ##      api_key: "sk_xxxxxx"  # Uncomment to override the `NOVITA_API_KEY` set in the environment variable
 
   embedding:
-    provider: "OpenAIEmbedding"
-    config:
-      model: "text-embedding-ada-002"
+    # provider: "OpenAIEmbedding"
+    # config:
+    #   model: "text-embedding-ada-002"
 #      api_key: ""  # Uncomment to override the `OPENAI_API_KEY` set in the environment variable
 #      base_url: "" # Uncomment to override the `OPENAI_BASE_URL` set in the environment variable
 #      dimension: 1536 # Uncomment to customize the embedding dimension 
@@ -70,9 +70,9 @@ provide_settings:
 ##      aws_access_key_id: ""  # Uncomment to override the `AWS_ACCESS_KEY_ID` set in the environment variable
 ##      aws_secret_access_key: ""  # Uncomment to override the `AWS_SECRET_ACCESS_KEY` set in the environment variable
     
-#    provider: "SiliconflowEmbedding"
-#    config:
-#      model: "BAAI/bge-m3"
+   provider: "SiliconflowEmbedding"
+   config:
+     model: "BAAI/bge-m3"
 # .    api_key: ""   # Uncomment to override the `SILICONFLOW_API_KEY` set in the environment variable   
 
 #    provider: "GeminiEmbedding"

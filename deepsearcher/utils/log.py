@@ -158,3 +158,23 @@ def color_print(message, **kwargs):
         **kwargs: Additional keyword arguments to pass to the logger.
     """
     progress_logger.info(message)
+
+
+def get_logger(name: str = "deepsearcher") -> logging.Logger:
+    """
+    Get a logger with the specified name.
+    
+    Args:
+        name: The name of the logger.
+        
+    Returns:
+        A configured logger instance.
+    """
+    logger = logging.getLogger(name)
+    if not logger.handlers:
+        handler = logging.StreamHandler()
+        formatter = ColoredFormatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+        handler.setFormatter(formatter)
+        logger.addHandler(handler)
+        logger.setLevel(logging.INFO)
+    return logger

@@ -3,6 +3,12 @@ from typing import Dict, List
 
 from deepsearcher.llm.base import BaseLLM, ChatResponse
 
+# 确保加载环境变量
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
 
 class DeepSeek(BaseLLM):
     """
@@ -40,6 +46,10 @@ class DeepSeek(BaseLLM):
             base_url = kwargs.pop("base_url")
         else:
             base_url = os.getenv("DEEPSEEK_BASE_URL", default="https://api.deepseek.com")
+        
+        if not api_key:
+            raise ValueError("DeepSeek API密钥未设置，请设置DEEPSEEK_API_KEY环境变量")
+        
         self.client = OpenAI_(api_key=api_key, base_url=base_url, **kwargs)
 
     def chat(self, messages: List[Dict]) -> ChatResponse:

@@ -66,7 +66,8 @@ GET_SUPPORTED_DOCS_PROMPT = """Given the following documents, select the ones th
 ### Answer
 {answer}
 
-Respond with a python list of indices of the selected documents.
+Respond with ONLY a python list of indices of the selected documents. For example: [0, 1, 2]
+Do not include any explanation or other text, just the list.
 """
 
 
@@ -190,13 +191,39 @@ class ChainOfRAG(RAGAgent):
                     }
                 ]
             )
-            supported_doc_indices = self.llm.literal_eval(chat_response.content)
-            supported_retrieved_results = [
-                retrieved_results[int(i)]
-                for i in supported_doc_indices
-                if int(i) < len(retrieved_results)
-            ]
-            token_usage = chat_response.total_tokens
+            try:
+                # 清理响应内容，移除可能的解释文本
+                response_content = self.llm.remove_think(chat_response.content).strip()
+                
+                # 如果响应包含多行，尝试找到看起来像列表的行
+                if '\n' in response_content:
+                    lines = response_content.split('\n')
+                    for line in lines:
+                        line = line.strip()
+                        if line.startswith('[') and line.endswith(']'):
+                            response_content = line
+                            break
+                
+                supported_doc_indices = self.llm.literal_eval(response_content)
+                
+                # 确保返回的是列表
+                if not isinstance(supported_doc_indices, list):
+                    supported_doc_indices = [supported_doc_indices] if supported_doc_indices is not None else []
+                
+                supported_retrieved_results = [
+                    retrieved_results[int(i)]
+                    for i in supported_doc_indices
+                    if isinstance(i, (int, str)) and str(i).isdigit() and int(i) < len(retrieved_results)
+                ]
+                token_usage = chat_response.total_tokens
+                
+            except Exception as e:
+                log.color_print(f"<error> Error parsing supported docs indices: {e} </error>\n")
+                log.color_print(f"<error> LLM response was: {chat_response.content} </error>\n")
+                # 发生错误时，返回所有检索到的文档作为备选
+                supported_retrieved_results = retrieved_results
+                token_usage = chat_response.total_tokens
+                
         return supported_retrieved_results, token_usage
 
     def _check_has_enough_info(

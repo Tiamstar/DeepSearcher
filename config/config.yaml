@@ -1,0 +1,390 @@
+# ===================================================================
+# 华为多Agent协作系统 - 统一配置文件
+# 基于MCP协议的多Agent代码生成系统配置
+# ===================================================================
+
+# ===================================================================
+# 项目基本信息
+# ===================================================================
+project:
+  name: 华为多Agent协作项目
+  description: 基于MCP协议的华为技术栈多Agent协作代码生成系统
+  version: 2.0.0
+
+# ===================================================================
+# 全局服务配置 (原deepsearcher配置结构)
+# 支持注释/解注释方式切换不同提供商
+# ===================================================================
+provide_settings:
+  # -------------------------------------------------------------------
+  # LLM配置 - 支持多种提供商，通过注释/解注释切换
+  # -------------------------------------------------------------------
+  llm:
+    # === Anthropic配置 (当前启用) ===
+    provider: "Anthropic"
+    config:
+      model: "claude-3-5-sonnet-20241022"
+      api_key_env: "ANTHROPIC_API_KEY"
+      base_url: ""
+      temperature: 0.1
+      max_tokens: 8000
+
+    # === OpenAI配置 ===
+    # provider: "OpenAI"
+    # config:
+    #   model: "o1-mini"
+    #   api_key_env: "OPENAI_API_KEY"
+    #   base_url: ""
+    #   temperature: 0.1
+    #   max_tokens: 4000
+
+    # === SiliconFlow配置 ===
+    # provider: "SiliconFlow"
+    # config:
+    #   model: "deepseek-ai/DeepSeek-R1"
+    #   api_key_env: "SILICONFLOW_API_KEY"
+    #   base_url: ""
+    #   temperature: 0.1
+    #   max_tokens: 8000
+
+    # === PPIO配置 ===
+    # provider: "PPIO"
+    # config:
+    #   model: "deepseek/deepseek-r1-turbo"
+    #   api_key_env: "PPIO_API_KEY"
+    #   base_url: ""
+    #   temperature: 0.1
+    #   max_tokens: 8000
+
+    # === TogetherAI配置 ===
+    # provider: "TogetherAI"
+    # config:
+    #   model: "deepseek-ai/DeepSeek-R1"
+    #   api_key_env: "TOGETHER_API_KEY"
+    #   temperature: 0.1
+    #   max_tokens: 8000
+
+    # === AzureOpenAI配置 ===
+    # provider: "AzureOpenAI"
+    # config:
+    #   model: ""
+    #   api_version: ""
+    #   azure_endpoint_env: "AZURE_OPENAI_ENDPOINT"
+    #   api_key_env: "AZURE_OPENAI_KEY"
+
+    # === Ollama配置 ===
+    # provider: "Ollama"
+    # config:
+    #   model: "qwq"
+    #   base_url: "http://localhost:11434"
+
+    # === Novita配置 ===
+    # provider: "Novita"
+    # config:
+    #   model: "deepseek/deepseek-v3-0324"
+    #   api_key_env: "NOVITA_API_KEY"
+
+  # -------------------------------------------------------------------
+  # 嵌入模型配置 - 支持多种提供商
+  # -------------------------------------------------------------------
+  embedding:
+    # === SiliconFlow嵌入模型 (当前启用) ===
+    provider: "SiliconflowEmbedding"
+    config:
+      model: "BAAI/bge-m3"
+      api_key_env: "SILICONFLOW_API_KEY"
+
+    # === OpenAI嵌入模型 ===
+    # provider: "OpenAIEmbedding"
+    # config:
+    #   model: "text-embedding-ada-002"
+    #   api_key_env: "OPENAI_API_KEY"
+    #   base_url: ""
+    #   dimension: 1536
+
+    # === Milvus内置嵌入模型 ===
+    # provider: "MilvusEmbedding"
+    # config:
+    #   model: "default"
+
+    # === Voyage嵌入模型 ===
+    # provider: "VoyageEmbedding"
+    # config:
+    #   model: "voyage-3"
+    #   api_key_env: "VOYAGE_API_KEY"
+
+    # === Bedrock嵌入模型 ===
+    # provider: "BedrockEmbedding"
+    # config:
+    #   model: "amazon.titan-embed-text-v2:0"
+    #   aws_access_key_id_env: "AWS_ACCESS_KEY_ID"
+    #   aws_secret_access_key_env: "AWS_SECRET_ACCESS_KEY"
+
+    # === Gemini嵌入模型 ===
+    # provider: "GeminiEmbedding"
+    # config:
+    #   model: "text-embedding-004"
+    #   api_key_env: "GEMINI_API_KEY"
+    #   dimension: 768
+
+    # === Ollama嵌入模型 ===
+    # provider: "OllamaEmbedding"
+    # config:
+    #   model: "bge-m3"
+    #   base_url: "http://localhost:11434"
+    #   dimension: 1024
+
+    # === FastEmbed嵌入模型 ===
+    # provider: "FastEmbedEmbedding"
+    # config:
+    #   model: "BAAI/bge-small-en-v1.5"
+
+    # === Novita嵌入模型 ===
+    # provider: "NovitaEmbedding"
+    # config:
+    #   model: "baai/bge-m3"
+    #   api_key_env: "NOVITA_API_KEY"
+
+    # === SentenceTransformer嵌入模型 ===
+    # provider: "SentenceTransformerEmbedding"
+    # config:
+    #   model: "BAAI/bge-large-zh-v1.5"
+
+  # -------------------------------------------------------------------
+  # 文件加载器配置
+  # -------------------------------------------------------------------
+  file_loader:
+    provider: "PDFLoader"
+    config: {}
+
+    # === JSON文件加载器 ===
+    # provider: "JsonFileLoader"
+    # config:
+    #   text_key: ""
+
+    # === 文本加载器 ===
+    # provider: "TextLoader"
+    # config: {}
+
+    # === Unstructured加载器 ===
+    # provider: "UnstructuredLoader"
+    # config: {}
+
+    # === Docling加载器 ===
+    # provider: "DoclingLoader"
+    # config: {}
+
+  # -------------------------------------------------------------------
+  # 网页爬虫配置
+  # -------------------------------------------------------------------
+  web_crawler:
+    provider: "FireCrawlCrawler"
+    config: {}
+
+    # === Crawl4AI爬虫 ===
+    # provider: "Crawl4AICrawler"
+    # config:
+    #   browser_config:
+    #     headless: false
+    #     proxy: "http://127.0.0.1:7890"
+    #     chrome_channel: "chrome"
+    #     verbose: true
+    #     viewport_width: 800
+    #     viewport_height: 600
+
+    # === Jina爬虫 ===
+    # provider: "JinaCrawler"
+    # config: {}
+
+    # === Docling爬虫 ===
+    # provider: "DoclingCrawler"
+    # config: {}
+
+  # -------------------------------------------------------------------
+  # 向量数据库配置
+  # -------------------------------------------------------------------
+  vector_db:
+    provider: "Milvus"
+    config:
+      default_collection: "huawei_agents"
+      uri: "./milvus.db"
+      token: "root:Milvus"
+      db: "default"
+
+    # === Oracle数据库 ===
+    # provider: "OracleDB"
+    # config:
+    #   default_collection: "huawei_agents"
+    #   user: ""
+    #   password: ""
+    #   dsn: ""
+    #   config_dir: ""
+    #   wallet_location: ""
+    #   wallet_password: ""
+
+    # === Qdrant向量数据库 ===
+    # provider: "Qdrant"
+    # config:
+    #   default_collection: "huawei_agents"
+    #   host: "localhost"
+    #   port: 6333
+
+# ===================================================================
+# Agent配置 - 支持专用LLM配置覆盖全局设置
+# 注释/解注释 llm_override 部分来启用Agent专用配置
+# ===================================================================
+agents:
+  # -------------------------------------------------------------------
+  # 搜索Agent - 不使用LLM
+  # -------------------------------------------------------------------
+  search:
+    description: 智能搜索Agent，支持本地和在线搜索
+    enabled: true
+    port: 8001
+    parameters:
+      local_search: true
+      online_search: true
+      max_results: 10
+      search_timeout: 30
+
+  # -------------------------------------------------------------------
+  # 项目管理Agent - 使用LLM进行任务分解和规划
+  # -------------------------------------------------------------------
+  project_manager:
+    description: 项目管理Agent，负责任务分解和项目规划
+    enabled: true
+    port: 8002
+    parameters:
+      max_tasks: 20
+      planning_depth: 3
+      task_timeout: 300
+    
+    # === 专用LLM配置 (可选) ===
+    # 解注释下面的配置来为此Agent使用专门的LLM模型
+    # llm_override:
+    #   provider: "DeepSeek"
+    #   config:
+    #     model: "deepseek-v3"        # 使用推理能力更强的模型进行规划
+    #     api_key_env: "DEEPSEEK_API_KEY"
+    #     temperature: 0.2           # 较低温度保证规划的一致性
+    #     max_tokens: 16000          # 更大的token限制支持复杂规划
+
+  # -------------------------------------------------------------------
+  # 代码生成Agent - 使用LLM生成代码
+  # -------------------------------------------------------------------
+  code_generator:
+    description: 代码生成Agent，负责根据需求生成代码
+    enabled: true
+    port: 8003
+    parameters:
+      generation_timeout: 180
+      max_code_length: 50000
+      supported_languages:
+        - python
+        - javascript
+        - java
+        - cpp
+        - go
+    
+    # === 专用LLM配置 (当前启用) ===
+    # 使用专门针对代码生成优化的模型
+    llm_override:
+      provider: "DeepSeek"
+      config:
+        model: "deepseek-coder"       # 使用稳定的代码生成模型
+        api_key_env: "DEEPSEEK_API_KEY"
+        temperature: 0.3             # 适中温度平衡创造性和准确性
+        max_tokens: 8000
+
+  # -------------------------------------------------------------------
+  # 代码检查Agent - 不使用LLM，使用静态分析工具
+  # -------------------------------------------------------------------
+  code_checker:
+    description: 代码检查Agent，负责代码质量检查和静态分析
+    enabled: true
+    port: 8004
+    parameters:
+      cppcheck_enabled: true
+      eslint_enabled: true
+      sonarqube_enabled: false
+      timeout: 120
+
+  # -------------------------------------------------------------------
+  # 最终代码生成Agent - 使用LLM进行代码优化
+  # -------------------------------------------------------------------
+  final_generator:
+    description: 最终代码生成Agent，负责代码优化和最终输出
+    enabled: true
+    port: 8005
+    parameters:
+      include_documentation: true
+      optimization_level: high
+      output_format: structured
+    
+    # === 专用LLM配置 (当前启用) ===
+    # 使用专门的代码优化模型
+    llm_override:
+      provider: "DeepSeek"
+      config:
+        model: "deepseek-coder"       # 使用专门的代码模型进行优化
+        api_key_env: "DEEPSEEK_API_KEY"
+        temperature: 0.1             # 低温度确保代码质量
+        max_tokens: 8000
+
+# ===================================================================
+# DeepSearcher配置 (原项目兼容)
+# ===================================================================
+deepsearcher:
+  query_settings:
+    max_iter: 3
+  load_settings:
+    chunk_size: 1500
+    chunk_overlap: 100
+
+# ===================================================================
+# 工作流配置
+# ===================================================================
+workflows:
+  complete_code_generation:
+    enabled: true
+    timeout: 600
+    steps:
+      - agent: project_manager
+        method: project.decompose
+        timeout: 120
+      - agent: search
+        method: search.adaptive
+        timeout: 60
+      - agent: code_generator
+        method: code.generate
+        timeout: 180
+      - agent: code_checker
+        method: code.check.unified
+        timeout: 120
+      - agent: final_generator
+        method: code.finalize
+        timeout: 120
+
+# ===================================================================
+# API服务配置
+# ===================================================================
+api:
+  host: 0.0.0.0
+  port: 8000
+  debug: false
+
+# ===================================================================
+# MCP协议配置
+# ===================================================================
+mcp:
+  protocol_version: "2024-11-05"
+  timeout: 300
+  max_concurrent_requests: 10
+
+# ===================================================================
+# 日志配置
+# ===================================================================
+logging:
+  level: INFO
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  file: logs/mcp_system.log

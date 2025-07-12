@@ -94,3 +94,44 @@ def naive_rag_query(
     naive_rag = configuration.naive_rag
     answer, retrieved_results, consume_tokens = naive_rag.query(query)
     return answer, retrieved_results
+
+
+def search_only_query(
+    query: str, collection: str = None, max_iter: int = 2, top_k: int = 10
+) -> Tuple[List[RetrievalResult], int]:
+    """
+    只搜索不生成答案的查询模式
+    
+    使用ChainOfSearchOnly代理进行查询，只返回检索结果，不生成答案
+    
+    Args:
+        query: 查询问题
+        collection: 要搜索的集合名称，如果为None，则搜索所有集合
+        max_iter: 最大迭代次数
+        top_k: 要考虑的最大结果数
+        
+    Returns:
+        包含以下内容的元组:
+            - 检索结果列表
+            - 消耗的token数量
+    """
+    from deepsearcher.agent.chain_of_search import ChainOfSearchOnly
+    
+    # 确保配置已初始化
+    if not hasattr(configuration, "llm") or not configuration.llm:
+        raise ValueError("LLM not configured. Please initialize configuration first.")
+    
+    # 创建ChainOfSearchOnly实例
+    search_only_agent = ChainOfSearchOnly(
+        llm=configuration.llm,
+        embedding_model=configuration.embedding,
+        vector_db=configuration.vector_db,
+        max_iter=max_iter,
+        early_stopping=False,
+        route_collection=collection is None,  # 如果指定了集合，则不需要路由
+    )
+    
+    # 执行仅搜索查询
+    _, retrieved_results, token_usage = search_only_agent.query(query, max_iter=max_iter)
+    
+    return retrieved_results, token_usage

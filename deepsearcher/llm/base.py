@@ -86,6 +86,7 @@ class BaseLLM(ABC):
         response_content = BaseLLM.remove_think(response_content)
 
         try:
+            # 首先尝试处理代码块
             if response_content.startswith("```") and response_content.endswith("```"):
                 if response_content.startswith("```python"):
                     response_content = response_content[9:-3]
@@ -97,19 +98,57 @@ class BaseLLM(ABC):
                     response_content = response_content[4:-3]
                 else:
                     raise ValueError("Invalid code block format")
-            result = ast.literal_eval(response_content.strip())
+            
+            # 清理内容
+            response_content = response_content.strip()
+            
+            # 尝试直接解析
+            result = ast.literal_eval(response_content)
+            return result
+            
         except Exception:
-            matches = re.findall(r"(\[.*?\]|\{.*?\})", response_content, re.DOTALL)
-
-            if len(matches) != 1:
+            # 如果直接解析失败，尝试多种方法提取
+            try:
+                # 方法1: 正则匹配列表或字典
+                matches = re.findall(r"(\[.*?\]|\{.*?\})", response_content, re.DOTALL)
+                
+                if len(matches) == 1:
+                    json_part = matches[0]
+                    return ast.literal_eval(json_part)
+                elif len(matches) > 1:
+                    # 如果有多个匹配，选择第一个
+                    json_part = matches[0]
+                    return ast.literal_eval(json_part)
+                
+                # 方法2: 按行查找
+                lines = response_content.split('\n')
+                for line in lines:
+                    line = line.strip()
+                    if line.startswith('[') and line.endswith(']'):
+                        try:
+                            return ast.literal_eval(line)
+                        except:
+                            continue
+                    elif line.startswith('{') and line.endswith('}'):
+                        try:
+                            return ast.literal_eval(line)
+                        except:
+                            continue
+                
+                # 方法3: 尝试提取数字列表
+                numbers = re.findall(r'\d+', response_content)
+                if numbers:
+                    return [int(n) for n in numbers]
+                
+                # 如果所有方法都失败了
                 raise ValueError(
                     f"Invalid JSON/List format for response content:\n{response_content}"
                 )
-
-            json_part = matches[0]
-            return ast.literal_eval(json_part)
-
-        return result
+                
+            except Exception as e:
+                raise ValueError(
+                    f"Invalid JSON/List format for response content:\n{response_content}"
+                )
 
     @staticmethod
     def remove_think(response_content: str) -> str:

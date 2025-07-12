@@ -1,0 +1,72 @@
+version: '3.8'
+
+services:
+  sonarqube:
+    image: sonarqube:9.9.2-community
+    hostname: sonarqube
+    container_name: sonarqube
+    depends_on:
+      - db
+    environment:
+      # 数据库连接配置
+      SONAR_JDBC_URL: jdbc:postgresql://db:5432/sonar
+      SONAR_JDBC_USERNAME: sonar
+      SONAR_JDBC_PASSWORD: sonar
+      # 系统配置
+      SONAR_ES_BOOTSTRAP_CHECKS_DISABLE: 'true'
+      # JVM内存配置
+      SONAR_CE_JAVAOPTS: '-Dfile.encoding=UTF-8 -Xmx2g'
+      SONAR_WEB_JAVAOPTS: '-Dfile.encoding=UTF-8 -Xmx1g'
+      # 禁用外部连接
+      SONAR_UPDATECENTER_ACTIVATE: 'false'
+      SONAR_TELEMETRY_ENABLE: 'false'
+      # 插件风险同意（修复之前的错误）
+      SONAR_PLUGINS_RISK_CONSENT: 'ACCEPTED'
+    volumes:
+      - sonarqube_data:/opt/sonarqube/data
+      - sonarqube_extensions:/opt/sonarqube/extensions
+      - sonarqube_logs:/opt/sonarqube/logs
+      - sonarqube_temp:/opt/sonarqube/temp
+      # 挂载项目代码目录用于扫描
+      - ../../:/workspace:ro
+    ports:
+      - "9000:9000"
+    networks:
+      - sonarnet
+    restart: unless-stopped
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+      nofile:
+        soft: 65536
+        hard: 65536
+
+  db:
+    image: postgres:15
+    hostname: postgresql
+    container_name: postgresql
+    environment:
+      POSTGRES_USER: sonar
+      POSTGRES_PASSWORD: sonar
+      POSTGRES_DB: sonar
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8"
+    volumes:
+      - postgresql:/var/lib/postgresql
+      - postgresql_data:/var/lib/postgresql/data
+    networks:
+      - sonarnet
+    restart: unless-stopped
+    command: postgres -c max_connections=200
+
+volumes:
+  sonarqube_data:
+  sonarqube_extensions:
+  sonarqube_logs:
+  sonarqube_temp:
+  postgresql:
+  postgresql_data:
+
+networks:
+  sonarnet:
+    driver: bridge 
