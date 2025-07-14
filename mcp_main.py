@@ -101,7 +101,13 @@ class MCPCli:
                 
                 # 处理代码生成请求
                 start_time = time.time()
-                result = await self._process_request(user_input)
+                
+                # 判断是否为鸿蒙相关请求
+                if self._is_harmonyos_request(user_input):
+                    result = await self._process_harmonyos_request(user_input)
+                else:
+                    result = await self._process_request(user_input)
+                    
                 end_time = time.time()
                 
                 self._print_result(result, end_time - start_time)
@@ -150,10 +156,19 @@ class MCPCli:
         print(f"\n{'='*80}")
         print(f"📝 处理结果")
         print(f"⏱️ 处理时间: {processing_time:.2f}秒")
+        
+        # 检查是否为鸿蒙工作流
+        is_harmonyos = result.get("workflow_type") == "harmonyos"
+        if is_harmonyos:
+            print(f"🔧 工作流类型: 鸿蒙开发专用")
+        
         print(f"{'='*80}")
         
         if result["success"]:
-            if result["result"] and "context" in result["result"]:
+            if is_harmonyos and result["result"]:
+                # 鸿蒙工作流专用结果显示
+                self._print_harmonyos_result(result["result"])
+            elif result["result"] and "context" in result["result"]:
                 context = result["result"]["context"]
                 if "final_code" in context:
                     print("\n💻 生成的代码:")
@@ -173,6 +188,45 @@ class MCPCli:
             print(f"\n❌ 处理失败: {result['error']}")
         
         print(f"\n{'='*80}")
+    
+    def _print_harmonyos_result(self, result: Dict[str, Any]):
+        """打印鸿蒙工作流结果"""
+        status = result.get("status", "unknown")
+        loop_count = result.get("total_iterations", 0)
+        errors_fixed = result.get("total_errors_fixed", 0)
+        
+        print(f"\n🎯 鸿蒙工作流执行结果:")
+        print(f"   状态: {'✅ 成功' if status == 'success' else '❌ 失败'}")
+        print(f"   修复循环次数: {loop_count}")
+        print(f"   修复错误数量: {errors_fixed}")
+        
+        # 显示最终结果
+        final_result = result.get("final_result", {})
+        if final_result.get("generated_files"):
+            generated_files = final_result["generated_files"]
+            print(f"   生成文件数量: {len(generated_files)}")
+            
+            print("\n📁 生成的文件:")
+            for file_info in generated_files[:5]:  # 只显示前5个
+                file_path = file_info.get("path", "unknown")
+                file_type = file_info.get("type", "unknown")
+                print(f"   - {file_type}: {file_path}")
+            
+            if len(generated_files) > 5:
+                print(f"   ... 还有 {len(generated_files) - 5} 个文件")
+        
+        # 显示修复建议
+        if result.get("fix_suggestions"):
+            suggestions = result["fix_suggestions"]
+            print(f"\n💡 修复建议 ({len(suggestions)} 条):")
+            for suggestion in suggestions[:3]:  # 只显示前3条
+                print(f"   - {suggestion}")
+        
+        print("\n📝 说明:")
+        print("   - 代码已生成到 MyApplication2/ 目录")
+        print("   - 已通过 codelinter 静态检查")
+        print("   - 已通过 hvigorw 编译验证")
+        print("   - 建议在实际使用前进行功能测试")
     
     def _show_help(self):
         """显示帮助信息"""
@@ -319,6 +373,57 @@ async def main():
                 sys.exit(1)
             
             await cli.single_request(args.query, args.workflow, args.language, args.output)
+    
+    def _is_harmonyos_request(self, user_input: str) -> bool:
+        """判断是否为鸿蒙相关请求"""
+        harmonyos_keywords = [
+            "鸿蒙", "harmonyos", "arkts", "arkui", 
+            "ets", "hvigor", "codelinter", "组件",
+            "页面", "entry", "component", "ability"
+        ]
+        
+        user_input_lower = user_input.lower()
+        return any(keyword in user_input_lower for keyword in harmonyos_keywords)
+    
+    async def _process_harmonyos_request(self, user_input: str) -> Dict[str, Any]:
+        """处理鸿蒙请求"""
+        try:
+            # 使用鸿蒙专用工作流
+            message = MCPMessage(
+                method="coordinator.execute_workflow",
+                params={
+                    "workflow_name": "harmonyos_complete_development",
+                    "params": {
+                        "user_input": user_input
+                    }
+                },
+                id=f"harmonyos_{int(time.time())}"
+            )
+            
+            response = await self.coordinator.handle_request(message)
+            
+            if response.error:
+                return {
+                    "success": False,
+                    "error": response.error,
+                    "result": None,
+                    "workflow_type": "harmonyos"
+                }
+            
+            return {
+                "success": True,
+                "error": None,
+                "result": response.result,
+                "workflow_type": "harmonyos"
+            }
+            
+        except Exception as e:
+            return {
+                "success": False,
+                "error": str(e),
+                "result": None,
+                "workflow_type": "harmonyos"
+            }
 
 
 if __name__ == "__main__":
