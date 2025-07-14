@@ -19,6 +19,7 @@ from mcp_agents.code_checker import CodeCheckerAgent
 from mcp_agents.final_generator import FinalGeneratorAgent
 
 from .workflow_manager import WorkflowManager
+from .harmonyos_workflow import HarmonyOSWorkflowManager
 
 
 class MCPCoordinator:
@@ -29,6 +30,7 @@ class MCPCoordinator:
         self.agents: Dict[str, MCPAgent] = {}
         self.protocol = MCPProtocol()
         self.workflow_manager = WorkflowManager()
+        self.harmonyos_workflow = HarmonyOSWorkflowManager(self)  # 鸿蒙工作流管理器
         self.logger = logging.getLogger("mcp.coordinator")
         
         # 会话管理
@@ -347,11 +349,15 @@ class MCPCoordinator:
         if not workflow_name:
             raise ValueError("工作流名称不能为空")
         
+        # 鸿蒙专用工作流
+        if workflow_name == "harmonyos_complete_development":
+            return await self._execute_harmonyos_workflow(workflow_params, session_id)
+        
         # 创建会话
         self._create_session(session_id, workflow_name, workflow_params)
         
         try:
-            # 执行工作流
+            # 执行原有工作流
             execution_id = await self.workflow_manager.execute_workflow(
                 workflow_name, session_id, workflow_params
             )
@@ -528,4 +534,49 @@ class MCPCoordinator:
             except Exception as e:
                 self.logger.error(f"关闭Agent {agent_id} 失败: {str(e)}")
         
-        self.logger.info("MCP协调器已关闭") 
+        self.logger.info("MCP协调器已关闭")
+    
+    # ==================== 鸿蒙工作流专用方法 ====================
+    
+    async def _execute_harmonyos_workflow(self, workflow_params: Dict[str, Any], session_id: str) -> Dict[str, Any]:
+        """执行鸿蒙专用工作流"""
+        try:
+            user_input = workflow_params.get("user_input", "")
+            if not user_input:
+                raise ValueError("用户需求不能为空")
+            
+            self.logger.info(f"开始执行鸿蒙工作流: {session_id}")
+            
+            # 使用鸿蒙工作流管理器执行
+            result = await self.harmonyos_workflow.execute_harmonyos_workflow(user_input, session_id)
+            
+            # 更新统计
+            self.stats["workflow_usage"]["harmonyos_complete_development"] = \
+                self.stats["workflow_usage"].get("harmonyos_complete_development", 0) + 1
+            
+            self.logger.info(f"鸿蒙工作流执行完成: {session_id}")
+            
+            return {
+                "workflow_name": "harmonyos_complete_development",
+                "session_id": session_id,
+                "status": "completed" if result.get("status") == "success" else "failed",
+                "result": result,
+                "loop_count": result.get("total_iterations", 0),
+                "total_errors_fixed": result.get("total_errors_fixed", 0)
+            }
+            
+        except Exception as e:
+            self.logger.error(f"鸿蒙工作流执行失败: {e}")
+            raise
+    
+    async def get_harmonyos_workflow_status(self, session_id: str) -> Optional[Dict[str, Any]]:
+        """获取鸿蒙工作流状态"""
+        return self.harmonyos_workflow.get_workflow_status(session_id)
+    
+    async def cancel_harmonyos_workflow(self, session_id: str) -> bool:
+        """取消鸿蒙工作流"""
+        return await self.harmonyos_workflow.cancel_workflow(session_id)
+    
+    def get_active_harmonyos_workflows(self) -> List[str]:
+        """获取活跃的鸿蒙工作流"""
+        return self.harmonyos_workflow.get_active_workflows() 
