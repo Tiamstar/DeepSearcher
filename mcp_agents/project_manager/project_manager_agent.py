@@ -20,6 +20,9 @@ from mcp_agents.base.mcp_agent import MCPAgent
 from mcp_agents.base.protocol import MCPMessage, MessageType
 from shared.config_loader import get_config_loader
 
+# 导入鸿蒙相关组件
+from mcp_agents.harmonyos import HarmonyOSProjectAnalyzer, HarmonyOSCompilerService
+
 # 导入DeepSearcher组件 - 与原项目保持一致
 try:
     from deepsearcher.configuration import config, init_config
@@ -51,6 +54,10 @@ class ProjectManagerAgent(MCPAgent):
         
         # 使用原项目相同的LLM对象
         self.llm = llm
+        
+        # 初始化鸿蒙组件
+        self.harmonyos_analyzer = HarmonyOSProjectAnalyzer()
+        self.harmonyos_compiler = HarmonyOSCompilerService()
         
         # 注册MCP方法
         self._register_mcp_methods()
@@ -95,7 +102,11 @@ class ProjectManagerAgent(MCPAgent):
             "project.estimate": self._estimate_workload,
             "project.analyze": self._analyze_project,
             "project.plan": self._create_project_plan,
-            "project.status": self._get_project_status
+            "project.status": self._get_project_status,
+            # 新增鸿蒙专用方法
+            "project.analyze_harmonyos_requirements": self._analyze_harmonyos_requirements,
+            "project.hvigor_compile": self._hvigor_compile,
+            "project.check_project_health": self._check_project_health
         }
     
     async def initialize(self) -> Dict[str, Any]:
@@ -619,4 +630,151 @@ class ProjectManagerAgent(MCPAgent):
                     "description": "项目规划工具"
                 }
             ]
-        } 
+        }
+    
+    # ==================== 鸿蒙专用方法 ====================
+    
+    async def _analyze_harmonyos_requirements(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        """分析鸿蒙需求并规划文件生成"""
+        try:
+            requirement = params.get("requirement", "")
+            project_path = params.get("project_path", "MyApplication2")
+            
+            if not requirement:
+                return {
+                    "success": False,
+                    "error": "需求描述不能为空",
+                    "file_plan": {}
+                }
+            
+            logger.info(f"开始分析鸿蒙需求: {requirement}")
+            
+            # 使用分析器分析需求
+            analysis_result = self.harmonyos_analyzer.analyze_requirement_and_plan_files(
+                requirement, {"project_path": project_path}
+            )
+            
+            if analysis_result["success"]:
+                logger.info(f"需求分析成功，生成{len(analysis_result['file_plans'])}个文件计划")
+                
+                return {
+                    "success": True,
+                    "requirement": requirement,
+                    "project_path": project_path,
+                    "analysis": analysis_result["analysis"],
+                    "file_plan": analysis_result,
+                    "target_files": analysis_result["target_files"],
+                    "directories_to_create": analysis_result["directories_to_create"],
+                    "generation_strategy": analysis_result["generation_strategy"]
+                }
+            else:
+                return {
+                    "success": False,
+                    "error": analysis_result.get("error", "需求分析失败"),
+                    "file_plan": {}
+                }
+                
+        except Exception as e:
+            logger.error(f"鸿蒙需求分析失败: {e}")
+            return {
+                "success": False,
+                "error": str(e),
+                "file_plan": {}
+            }
+    
+    async def _hvigor_compile(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        """执行hvigor编译检查"""
+        try:
+            project_path = params.get("project_path", "MyApplication2")
+            
+            logger.info(f"开始hvigor编译检查: {project_path}")
+            
+            # 使用编译服务执行编译
+            compile_result = self.harmonyos_compiler.run_hvigor_compile()
+            
+            # 生成修复建议
+            if not compile_result["success"] and compile_result.get("errors"):
+                suggestions = self.harmonyos_compiler.generate_fix_suggestions(
+                    [error for error in compile_result["errors"] if isinstance(error, dict)], 
+                    []
+                )
+                compile_result["fix_suggestions"] = suggestions
+            
+            logger.info(f"编译检查完成: {'成功' if compile_result['success'] else '失败'}")
+            
+            return {
+                "success": True,
+                "project_path": project_path,
+                "compile_result": compile_result,
+                "status": "success" if compile_result["success"] else "failed",
+                "errors": compile_result.get("errors", []),
+                "total_errors": compile_result.get("total_errors", 0),
+                "fix_suggestions": compile_result.get("fix_suggestions", [])
+            }
+            
+        except Exception as e:
+            logger.error(f"hvigor编译失败: {e}")
+            return {
+                "success": False,
+                "error": str(e),
+                "status": "failed",
+                "compile_result": {}
+            }
+    
+    async def _check_project_health(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        """检查项目健康状况"""
+        try:
+            logger.info("开始检查项目健康状况")
+            
+            # 使用编译服务检查项目健康状况
+            health_result = self.harmonyos_compiler.check_project_health()
+            
+            # 获取项目结构信息
+            project_info = self.harmonyos_analyzer.get_project_info()
+            
+            logger.info(f"项目健康检查完成: {health_result.get('health_status', 'unknown')}")
+            
+            return {
+                "success": True,
+                "health_check": health_result,
+                "project_info": project_info,
+                "health_score": health_result.get("health_score", 0),
+                "health_status": health_result.get("health_status", "unknown"),
+                "recommendations": self._generate_health_recommendations(health_result)
+            }
+            
+        except Exception as e:
+            logger.error(f"项目健康检查失败: {e}")
+            return {
+                "success": False,
+                "error": str(e),
+                "health_score": 0,
+                "health_status": "error"
+            }
+    
+    def _generate_health_recommendations(self, health_result: Dict[str, Any]) -> List[str]:
+        """根据健康检查结果生成建议"""
+        recommendations = []
+        
+        missing_files = health_result.get("missing_files", [])
+        missing_dirs = health_result.get("missing_directories", [])
+        
+        if missing_files:
+            recommendations.append(f"缺少关键文件: {', '.join(missing_files)}")
+        
+        if missing_dirs:
+            recommendations.append(f"缺少必要目录: {', '.join(missing_dirs)}")
+        
+        if not health_result.get("codelinter_available", False):
+            recommendations.append("codelinter工具不可用，请检查安装")
+        
+        if not health_result.get("hvigor_available", False):
+            recommendations.append("hvigor工具不可用，请检查安装")
+        
+        health_score = health_result.get("health_score", 0)
+        if health_score < 50:
+            recommendations.append("项目结构存在严重问题，建议重新初始化")
+        elif health_score < 80:
+            recommendations.append("项目结构需要完善，建议补充缺失文件")
+        
+        return recommendations 

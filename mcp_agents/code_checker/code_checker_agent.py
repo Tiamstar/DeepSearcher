@@ -17,6 +17,9 @@ from mcp_agents.base import MCPAgent, MCPMessage
 from shared.interfaces import CodeReviewRequest, CodeReviewResult
 from shared.services import UnifiedCodeChecker, create_simple_config
 
+# 导入鸿蒙编译服务
+from mcp_agents.harmonyos import HarmonyOSCompilerService
+
 logger = logging.getLogger(__name__)
 
 class CodeCheckerAgent(MCPAgent):
@@ -39,6 +42,9 @@ class CodeCheckerAgent(MCPAgent):
         
         self.code_checker = UnifiedCodeChecker(checker_config)
         
+        # 初始化鸿蒙编译服务（用于codelinter）
+        self.harmonyos_compiler = HarmonyOSCompilerService()
+        
         logger.info(f"✅ CodeChecker Agent {agent_id} 初始化完成")
         logger.info(f"   - 支持的语言: {', '.join(self.code_checker.get_supported_languages())}")
         logger.info(f"   - 可用检查器: {list(self.code_checker.get_checker_status().keys())}")
@@ -59,6 +65,10 @@ class CodeCheckerAgent(MCPAgent):
         self.declare_capability("code.check.unified", {
             "description": "统一代码检查，自动选择最佳检查器",
             "parameters": ["code", "language", "review_type"]
+        })
+        self.declare_capability("code.check.codelinter", {
+            "description": "使用codelinter检查HarmonyOS ArkTS代码",
+            "parameters": ["project_path"]
         })
     
     async def initialize(self) -> Dict[str, Any]:
@@ -103,6 +113,10 @@ class CodeCheckerAgent(MCPAgent):
             
             elif method == "code.check.sonarqube":
                 result = await self._sonarqube_check(params)
+                return self.protocol.create_response(message.id, result)
+            
+            elif method == "code.check.codelinter":
+                result = await self._codelinter_check(params)
                 return self.protocol.create_response(message.id, result)
             
             else:
@@ -416,4 +430,42 @@ class CodeCheckerAgent(MCPAgent):
         """获取支持的语言列表"""
         if self.code_checker:
             return self.code_checker.get_supported_languages()
-        return [] 
+        return []
+    
+    async def _codelinter_check(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        """使用codelinter检查HarmonyOS项目"""
+        try:
+            project_path = params.get("project_path", "MyApplication2")
+            
+            # 验证项目路径
+            if not project_path.endswith("MyApplication2"):
+                raise ValueError("codelinter只能在MyApplication2项目中使用")
+            
+            logger.info(f"开始codelinter检查: {project_path}")
+            
+            # 执行codelinter检查
+            result = self.harmonyos_compiler.run_codelinter_check()
+            
+            # 格式化结果
+            formatted_result = {
+                "request_id": f"codelinter_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
+                "project_path": project_path,
+                "success": result["success"],
+                "issues_found": result.get("issues", []),
+                "total_issues": result.get("total_issues", 0),
+                "error_count": result.get("error_count", 0),
+                "warning_count": result.get("warning_count", 0),
+                "raw_output": result.get("raw_output", ""),
+                "stderr": result.get("stderr", ""),
+                "agent_id": self.agent_id,
+                "checked_at": datetime.now().isoformat(),
+                "tool": "codelinter"
+            }
+            
+            logger.info(f"codelinter检查完成: {formatted_result['total_issues']} 个问题")
+            
+            return {"formatted_review_data": formatted_result}
+            
+        except Exception as e:
+            logger.error(f"codelinter检查失败: {str(e)}")
+            raise 
