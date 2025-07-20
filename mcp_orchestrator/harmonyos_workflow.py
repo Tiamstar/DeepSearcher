@@ -71,7 +71,7 @@ class HarmonyOSWorkflowManager:
             },
             WorkflowStep.SEARCH_INFORMATION: {
                 "agent": "search",
-                "method": "search.harmonyos_context",
+                "method": "search.harmonyos",
                 "next_step": WorkflowStep.GENERATE_CODE,
                 "required_params": ["query"],
                 "can_skip": False

@@ -1,0 +1,19 @@
+{
+  "license": "MIT",
+  "devDependencies": {},
+  "keywords": [
+    "图片预览",
+    "预览",
+    "ImagePreview",
+    "Preview",
+    "Image"
+  ],
+  "author": "rainvice",
+  "name": "@rv/image-preview",
+  "description": "可以像使用 Swiper 一样方便的预览图片等不同组件，支持缩放和平移，提供一些自定义属性和事件监听。",
+  "main": "Index.ets",
+  "homepage": "https://gitee.com/MUYS/",
+  "repository": "https://gitee.com/MUYS/ImagePreview/",
+  "version": "2.0.1",
+  "dependencies": {}
+}

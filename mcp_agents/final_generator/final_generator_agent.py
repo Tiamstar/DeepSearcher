@@ -46,6 +46,12 @@ class FinalGeneratorAgent(MCPAgent):
             "description": "重构代码结构",
             "parameters": ["code", "refactor_type", "language"]
         })
+        
+        # 新增鸿蒙专用能力
+        self.declare_capability("code.finalize_harmonyos", {
+            "description": "生成鸿蒙ArkTS最终代码",
+            "parameters": ["generated_files", "check_results", "requirement", "project_path", "fix_suggestions"]
+        })
     
     async def initialize(self) -> Dict[str, Any]:
         """初始化最终代码生成Agent"""
@@ -65,14 +71,14 @@ class FinalGeneratorAgent(MCPAgent):
             api_key = self.llm_config.get("api_key", "")
             base_url = self.llm_config.get("base_url", "")
             
-            self.logger.info(f"初始化LLM: provider={provider}, model={model}, api_key_length={len(api_key) if api_key else 0}")
+           
             
             if llm_type.lower() == "deepseek":
                 # 确保有API密钥
                 if not api_key:
                     api_key = os.getenv("DEEPSEEK_API_KEY")
                 if not api_key:
-                    raise ValueError("DeepSeek API密钥未配置，请设置DEEPSEEK_API_KEY环境变量")
+                    raise ValueError("LLM API密钥未配置，请设置DEEPSEEK_API_KEY环境变量")
                 
                 self.llm_client = DeepSeek(
                     api_key=api_key,
@@ -84,7 +90,7 @@ class FinalGeneratorAgent(MCPAgent):
                 if not api_key:
                     api_key = os.getenv("OPENAI_API_KEY")
                 if not api_key:
-                    raise ValueError("OpenAI API密钥未配置，请设置OPENAI_API_KEY环境变量")
+                    raise ValueError("LLM API密钥未配置，请设置OPENAI_API_KEY环境变量")
                 
                 self.llm_client = OpenAI(
                     api_key=api_key,
@@ -96,7 +102,7 @@ class FinalGeneratorAgent(MCPAgent):
                 if not api_key:
                     api_key = os.getenv("ANTHROPIC_API_KEY")
                 if not api_key:
-                    raise ValueError("Anthropic API密钥未配置，请设置ANTHROPIC_API_KEY环境变量")
+                    raise ValueError("LLM API密钥未配置，请设置ANTHROPIC_API_KEY环境变量")
                 
                 self.llm_client = Anthropic(
                     api_key=api_key,
@@ -105,7 +111,7 @@ class FinalGeneratorAgent(MCPAgent):
             else:
                 raise ValueError(f"不支持的LLM类型: {llm_type}")
             
-            self.logger.info(f"最终代码生成Agent初始化成功，使用LLM: {provider} - {model}")
+            self.logger.info(f"最终代码生成Agent初始化成功")
             
             return {
                 "agent_id": self.agent_id,
@@ -138,6 +144,10 @@ class FinalGeneratorAgent(MCPAgent):
             
             elif method == "code.refactor":
                 result = await self._refactor_code(params)
+                return self.protocol.create_response(message.id, result)
+                
+            elif method == "code.finalize_harmonyos":
+                result = await self._finalize_harmonyos_code(params)
                 return self.protocol.create_response(message.id, result)
             
             else:
@@ -508,4 +518,233 @@ class FinalGeneratorAgent(MCPAgent):
                     "required": ["code", "language"]
                 }
             }
-        ] 
+        ]
+    
+    # ==================== 鸿蒙专用方法 ====================
+    
+    async def _finalize_harmonyos_code(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        """生成鸿蒙ArkTS最终代码"""
+        try:
+            generated_files = params.get("generated_files", [])
+            check_results = params.get("check_results", {})
+            requirement = params.get("requirement", "")
+            project_path = params.get("project_path", "MyApplication2")
+            fix_suggestions = params.get("fix_suggestions", [])
+            
+            if not generated_files:
+                raise ValueError("没有生成的文件需要最终化")
+            
+            self.logger.info(f"开始鸿蒙代码最终化: {len(generated_files)} 个文件")
+            
+            # 分析检查结果
+            lint_issues = check_results.get("lint_issues", [])
+            compilation_errors = check_results.get("compilation_errors", [])
+            
+            # 对每个生成的文件进行最终优化
+            finalized_files = []
+            for file_info in generated_files:
+                file_path = file_info.get("path", "")
+                file_type = file_info.get("type", "unknown")
+                
+                # 读取当前文件内容
+                if os.path.exists(file_path):
+                    with open(file_path, 'r', encoding='utf-8') as f:
+                        current_code = f.read()
+                else:
+                    self.logger.warning(f"文件不存在: {file_path}")
+                    continue
+                
+                # 为该文件过滤相关的问题
+                file_issues = self._filter_file_issues(file_path, lint_issues, compilation_errors)
+                
+                # 生成最终代码
+                final_code = await self._optimize_harmonyos_file(
+                    current_code, file_path, file_type, file_issues, fix_suggestions, requirement
+                )
+                
+                # 保存最终代码
+                if final_code:
+                    with open(file_path, 'w', encoding='utf-8') as f:
+                        f.write(final_code)
+                    
+                    finalized_files.append({
+                        "path": file_path,
+                        "type": file_type,
+                        "size": len(final_code),
+                        "status": "finalized"
+                    })
+                    
+                    self.logger.info(f"已最终化文件: {file_path}")
+            
+            self.logger.info(f"鸿蒙代码最终化完成: {len(finalized_files)} 个文件")
+            
+            return {
+                "success": True,
+                "finalized_files": finalized_files,
+                "total_files": len(finalized_files),
+                "project_path": project_path,
+                "requirement": requirement
+            }
+            
+        except Exception as e:
+            self.logger.error(f"鸿蒙代码最终化失败: {e}")
+            return {
+                "success": False,
+                "error": str(e),
+                "finalized_files": [],
+                "total_files": 0
+            }
+    
+    def _filter_file_issues(self, file_path: str, lint_issues: List, compilation_errors: List) -> List[Dict]:
+        """过滤与特定文件相关的问题"""
+        import os
+        filename = os.path.basename(file_path)
+        
+        filtered_issues = []
+        
+        # 过滤linter问题
+        for issue in lint_issues:
+            if isinstance(issue, dict) and issue.get("file") and filename in issue["file"]:
+                filtered_issues.append({
+                    "type": "lint",
+                    "message": issue.get("message", ""),
+                    "line": issue.get("line", 0),
+                    "severity": issue.get("severity", "error")
+                })
+        
+        # 过滤编译错误
+        for error in compilation_errors:
+            if isinstance(error, dict) and error.get("file") and filename in error["file"]:
+                filtered_issues.append({
+                    "type": "compilation",
+                    "message": error.get("message", ""),
+                    "line": error.get("line", 0),
+                    "severity": "error"
+                })
+        
+        return filtered_issues
+    
+    async def _optimize_harmonyos_file(self, current_code: str, file_path: str, file_type: str, 
+                                     file_issues: List[Dict], fix_suggestions: List[str], requirement: str) -> str:
+        """优化单个鸿蒙文件"""
+        import os
+        
+        filename = os.path.basename(file_path)
+        
+        # 构建鸿蒙专用提示词
+        system_prompt = """你是一个专业的鸿蒙应用开发专家，精通ArkTS语言和HarmonyOS开发。
+
+请优化提供的鸿蒙代码，确保：
+1. 符合ArkTS语法规范
+2. 正确使用鸿蒙组件和API
+3. 遵循鸿蒙开发最佳实践
+4. 修复所有检测到的问题
+5. 代码结构清晰，注释完整
+
+特别关注：
+- @Entry和@Component装饰器的正确使用
+- struct结构和build()方法的规范
+- 状态管理(@State, @Prop等)的正确应用
+- 组件属性和样式的规范设置
+- 导入语句的准确性"""
+
+        issues_text = ""
+        if file_issues:
+            issues_text = "检测到的问题：\n"
+            for issue in file_issues[:10]:  # 最多显示10个问题
+                issues_text += f"- {issue['type']}: {issue['message']}\n"
+        
+        suggestions_text = ""
+        if fix_suggestions:
+            suggestions_text = "修复建议：\n"
+            for suggestion in fix_suggestions[:5]:  # 最多显示5个建议
+                suggestions_text += f"- {suggestion}\n"
+        
+        user_prompt = f"""文件: {filename}
+文件类型: {file_type}
+原始需求: {requirement}
+
+当前代码:
+```arkts
+{current_code}
+```
+
+{issues_text}
+
+{suggestions_text}
+
+请生成优化后的完整代码，确保所有问题都被修复，代码符合鸿蒙开发规范。
+只输出最终的代码，不需要解释。"""
+        
+        try:
+            if not self.llm_client:
+                await self._initialize_llm()
+            
+            if self.llm_client:
+                messages = [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt}
+                ]
+                
+                response = self.llm_client.chat(messages)
+                optimized_code = self._extract_code_from_response(response.content)
+                
+                return optimized_code
+            else:
+                self.logger.warning(f"LLM客户端不可用，返回原始代码: {filename}")
+                return current_code
+                
+        except Exception as e:
+            self.logger.error(f"优化文件失败 {filename}: {e}")
+            return current_code
+    
+    async def _initialize_llm(self):
+        """初始化LLM客户端（如果还未初始化）"""
+        if self.llm_client:
+            return
+        
+        try:
+            from shared.config_loader import ConfigLoader
+            config_loader = ConfigLoader()
+            self.llm_config = config_loader.get_llm_config("final_generator")
+            
+            provider = self.llm_config.get("provider", "")
+            llm_type = self.llm_config.get("type", provider.lower())
+            model = self.llm_config.get("model", "")
+            api_key = self.llm_config.get("api_key", "")
+            base_url = self.llm_config.get("base_url", "")
+            
+            if llm_type.lower() == "deepseek":
+                if not api_key:
+                    api_key = os.getenv("DEEPSEEK_API_KEY")
+                if api_key:
+                    self.llm_client = DeepSeek(
+                        api_key=api_key,
+                        base_url=base_url or "https://api.deepseek.com",
+                        model=model or "deepseek-coder"
+                    )
+            elif llm_type.lower() == "openai":
+                if not api_key:
+                    api_key = os.getenv("OPENAI_API_KEY")
+                if api_key:
+                    self.llm_client = OpenAI(
+                        api_key=api_key,
+                        base_url=base_url,
+                        model=model or "gpt-3.5-turbo"
+                    )
+            elif llm_type.lower() == "anthropic":
+                if not api_key:
+                    api_key = os.getenv("ANTHROPIC_API_KEY")
+                if api_key:
+                    self.llm_client = Anthropic(
+                        api_key=api_key,
+                        model=model or "claude-3-sonnet-20240229"
+                    )
+            
+            if self.llm_client:
+                self.logger.info("LLM客户端初始化成功")
+            else:
+                self.logger.warning("LLM客户端初始化失败")
+                
+        except Exception as e:
+            self.logger.error(f"初始化LLM客户端失败: {e}")

@@ -123,7 +123,7 @@ class ConfigLoader:
                     provider = llm_override.get("provider", "")
                     config = llm_override.get("config", {})
                     
-                    logger.info(f"使用Agent {agent_name} 专用LLM配置: {provider}")
+                    logger.info(f"使用Agent {agent_name} 专用LLM配置")
                     
                     return {
                         "type": provider.lower(),
@@ -175,7 +175,7 @@ class ConfigLoader:
                     provider = embedding_override.get("provider", "")
                     config = embedding_override.get("config", {})
                     
-                    logger.info(f"使用Agent {agent_name} 专用嵌入模型配置: {provider}")
+                    logger.info(f"使用Agent {agent_name} 专用嵌入模型配置")
                     
                     return {
                         "provider": provider,

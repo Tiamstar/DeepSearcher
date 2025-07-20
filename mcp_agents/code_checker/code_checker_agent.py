@@ -29,11 +29,12 @@ class CodeCheckerAgent(MCPAgent):
         """初始化代码检查Agent"""
         super().__init__(agent_id, config)
         
-        # 初始化统一代码检查器
+        # 华为ArkTS项目只使用codelinter，不使用其他检查器
+        # 初始化统一代码检查器（禁用ESLint，只保留必要的检查器用于其他语言）
         checker_config = create_simple_config(
-            enable_eslint=True,
-            enable_cppcheck=True,
-            enable_sonarqube=True
+            enable_eslint=False,        # 禁用ESLint
+            enable_cppcheck=True,       # 保留C/C++检查
+            enable_sonarqube=False      # 禁用SonarQube
         )
         
         # 合并用户配置
@@ -47,28 +48,30 @@ class CodeCheckerAgent(MCPAgent):
         
         logger.info(f"✅ CodeChecker Agent {agent_id} 初始化完成")
         logger.info(f"   - 支持的语言: {', '.join(self.code_checker.get_supported_languages())}")
-        logger.info(f"   - 可用检查器: {list(self.code_checker.get_checker_status().keys())}")
         
-        # 声明能力
-        self.declare_capability("code.check.eslint", {
-            "description": "使用ESLint检查JavaScript/TypeScript/ArkTS代码",
-            "parameters": ["code", "language", "rules"]
-        })
+        # 只显示实际启用的检查器，过滤掉ESLint和SonarQube
+        checker_status = self.code_checker.get_checker_status()
+        enabled_checkers = []
+        for checker_name, status in checker_status.items():
+            if checker_name not in ['eslint', 'sonarqube'] and status.get('enabled', False):
+                enabled_checkers.append(checker_name)
+        # 为华为ArkTS项目，主要使用codelinter
+        enabled_checkers.append('codelinter')
+        logger.info(f"   - 可用检查器: {enabled_checkers}")
+        
+        # 声明能力 - 华为ArkTS项目专用
+        # 移除ESLint和SonarQube，只保留codelinter和必要的检查器
         self.declare_capability("code.check.cppcheck", {
-            "description": "使用Cppcheck检查C/C++代码",
+            "description": "使用Cppcheck检查C/C++代码（非ArkTS项目）",
             "parameters": ["code", "language", "standards"]
         })
-        self.declare_capability("code.check.sonarqube", {
-            "description": "使用SonarQube检查多种语言代码",
-            "parameters": ["code", "language", "quality_gate"]
-        })
-        self.declare_capability("code.check.unified", {
-            "description": "统一代码检查，自动选择最佳检查器",
-            "parameters": ["code", "language", "review_type"]
-        })
         self.declare_capability("code.check.codelinter", {
-            "description": "使用codelinter检查HarmonyOS ArkTS代码",
-            "parameters": ["project_path"]
+            "description": "使用codelinter检查HarmonyOS ArkTS代码（主要检查器）",
+            "parameters": ["project_path", "files_to_check"]
+        })
+        self.declare_capability("code.check.harmonyos", {
+            "description": "鸿蒙静态代码检查（仅使用codelinter）",
+            "parameters": ["project_path", "generated_files", "check_mode"]
         })
     
     async def initialize(self) -> Dict[str, Any]:
@@ -99,25 +102,26 @@ class CodeCheckerAgent(MCPAgent):
             method = message.method
             params = message.params or {}
             
-            if method == "code.check.unified":
-                result = await self._unified_check(params)
-                return self.protocol.create_response(message.id, result)
-            
-            elif method == "code.check.eslint":
-                result = await self._eslint_check(params)
-                return self.protocol.create_response(message.id, result)
-            
-            elif method == "code.check.cppcheck":
+            # 华为ArkTS项目只支持codelinter检查
+            if method == "code.check.cppcheck":
                 result = await self._cppcheck_check(params)
-                return self.protocol.create_response(message.id, result)
-            
-            elif method == "code.check.sonarqube":
-                result = await self._sonarqube_check(params)
                 return self.protocol.create_response(message.id, result)
             
             elif method == "code.check.codelinter":
                 result = await self._codelinter_check(params)
                 return self.protocol.create_response(message.id, result)
+            
+            elif method == "code.check.harmonyos":
+                result = await self._harmonyos_check(params)
+                return self.protocol.create_response(message.id, result)
+            
+            # 废弃的方法提示
+            elif method in ["code.check.eslint", "code.check.sonarqube", "code.check.unified"]:
+                return self.protocol.create_response(message.id, {
+                    "success": False,
+                    "error": f"方法 {method} 已废弃。华为ArkTS项目请使用 code.check.harmonyos",
+                    "suggestion": "使用 code.check.harmonyos 进行鸿蒙代码检查"
+                })
             
             else:
                 return self.protocol.handle_method_not_found(message.id, method)
@@ -468,4 +472,94 @@ class CodeCheckerAgent(MCPAgent):
             
         except Exception as e:
             logger.error(f"codelinter检查失败: {str(e)}")
-            raise 
+            raise
+    
+    async def _harmonyos_check(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        """鸿蒙静态代码检查 - 工作流专用方法"""
+        try:
+            # 从工作流上下文获取参数
+            files_to_check = params.get("files_to_check", [])
+            project_path = params.get("project_path", "MyApplication2")
+            current_phase = params.get("current_phase", "static_check")
+            
+            logger.info(f"🔍 开始鸿蒙静态检查")
+            logger.info(f"   - 检查文件数: {len(files_to_check)}")
+            logger.info(f"   - 项目路径: {project_path}")
+            logger.info(f"   - 当前阶段: {current_phase}")
+            
+            # 显示要检查的文件
+            for i, file_info in enumerate(files_to_check[:3]):
+                logger.info(f"   - 文件{i+1}: {file_info.get('path', 'N/A')}")
+            
+            logger.info(f"📋 执行codelinter检查命令...")
+            # 执行codelinter检查
+            result = self.harmonyos_compiler.run_codelinter_check()
+            
+            logger.info(f"📋 codelinter检查结果: success={result.get('success')}")
+            logger.info(f"   - 原始输出长度: {len(result.get('raw_output', ''))}")
+            logger.info(f"   - 问题数量: {len(result.get('issues', []))}")
+            
+            # 格式化错误信息供工作流使用
+            errors = []
+            warnings = []
+            if result.get("issues"):  # 只要有issues就处理，不管success状态
+                for issue in result["issues"]:
+                    if isinstance(issue, dict):
+                        # 规范化严重性级别
+                        severity = issue.get("severity", "")
+                        if not severity:
+                            # 尝试从消息中判断严重性
+                            message = issue.get("message", "").lower()
+                            if any(word in message for word in ["error", "fatal", "failed", "critical", "致命", "错误"]):
+                                severity = "error"
+                            else:
+                                severity = "warning"
+                        else:
+                            severity = severity.lower()
+                        
+                        error = {
+                            "file": issue.get("file", "unknown"),
+                            "line": issue.get("line", 1),
+                            "column": issue.get("column", 1),
+                            "message": issue.get("message", "Unknown error"),
+                            "severity": severity,
+                            "rule": issue.get("rule", "unknown"),
+                            "error_type": "lint"
+                        }
+                        
+                        # 严格区分错误和警告
+                        if severity == "error":
+                            errors.append(error)
+                        else:
+                            warnings.append(error)
+            
+            # 工作流返回格式
+            workflow_result = {
+                "success": result["success"],
+                "errors": errors,  # 只包含真正的错误
+                "warnings": warnings,  # 只包含警告
+                "all_issues": errors + warnings,  # 所有问题
+                "total_errors": len(errors),  # 只统计真正的错误
+                "total_warnings": len(warnings),
+                "files_checked": len(files_to_check),
+                "check_type": "codelinter",
+                "project_path": project_path,
+                "raw_output": result.get("raw_output", ""),
+                "checked_at": datetime.now().isoformat()
+            }
+            
+            logger.info(f"静态检查完成: {len(errors)} 个错误, {len(warnings)} 个警告")
+            
+            return workflow_result
+            
+        except Exception as e:
+            logger.error(f"鸿蒙静态检查失败: {e}")
+            return {
+                "success": False,
+                "error": str(e),
+                "errors": [],
+                "total_errors": 0,
+                "total_warnings": 0,
+                "files_checked": 0,
+                "check_type": "codelinter"
+            } 

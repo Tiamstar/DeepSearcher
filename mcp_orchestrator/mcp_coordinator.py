@@ -17,9 +17,11 @@ from mcp_agents.search import SearchAgent
 from mcp_agents.code_generator import CodeGeneratorAgent
 from mcp_agents.code_checker import CodeCheckerAgent
 from mcp_agents.final_generator import FinalGeneratorAgent
+from mcp_agents.harmonyos_compiler import HarmonyOSCompilerAgent
 
 from .workflow_manager import WorkflowManager
 from .harmonyos_workflow import HarmonyOSWorkflowManager
+from .collaborative_workflow import CollaborativeWorkflowManager
 
 
 class MCPCoordinator:
@@ -30,7 +32,8 @@ class MCPCoordinator:
         self.agents: Dict[str, MCPAgent] = {}
         self.protocol = MCPProtocol()
         self.workflow_manager = WorkflowManager()
-        self.harmonyos_workflow = HarmonyOSWorkflowManager(self)  # 鸿蒙工作流管理器
+        self.harmonyos_workflow = HarmonyOSWorkflowManager(self)  # 旧的鸿蒙工作流管理器
+        self.collaborative_workflow = CollaborativeWorkflowManager(self)  # 新的协作式工作流管理器
         self.logger = logging.getLogger("mcp.coordinator")
         
         # 会话管理
@@ -114,6 +117,10 @@ class MCPCoordinator:
         if "llm_config" not in fg_config or not fg_config["llm_config"]:
             fg_config["llm_config"] = config_loader.get_llm_config("final_generator")
         self.agents["final_generator"] = FinalGeneratorAgent(fg_config)
+        
+        # 初始化HarmonyOS编译器Agent
+        hc_config = agent_configs.get("harmonyos_compiler", {})
+        self.agents["harmonyos_compiler"] = HarmonyOSCompilerAgent(hc_config)
         
         # 启动所有Agent
         for agent_id, agent in self.agents.items():
@@ -279,6 +286,11 @@ class MCPCoordinator:
         
         agent = self.agents[agent_id]
         
+        # 输出Agent执行开始信息
+        self.logger.info(f"🤖 开始执行Agent: {agent_id}")
+        self.logger.info(f"   方法: {method}")
+        self.logger.info(f"   参数键: {list(params.keys()) if params else '无'}")
+        
         # 创建Agent请求消息
         agent_message = MCPMessage(
             id=str(uuid.uuid4()),
@@ -286,16 +298,44 @@ class MCPCoordinator:
             params=params
         )
         
-        # 执行请求
-        response = await agent.handle_request(agent_message)
-        
-        # 更新Agent使用统计
-        self.stats["agent_usage"][agent_id] = self.stats["agent_usage"].get(agent_id, 0) + 1
-        
-        if response.error:
-            raise Exception(f"Agent {agent_id} 处理失败: {response.error}")
-        
-        return response.result
+        try:
+            # 执行请求
+            response = await agent.handle_request(agent_message)
+            
+            # 输出Agent执行结果信息
+            if response.error:
+                self.logger.error(f"❌ Agent {agent_id} 执行失败: {response.error}")
+                raise Exception(f"Agent {agent_id} 处理失败: {response.error}")
+            else:
+                self.logger.info(f"✅ Agent {agent_id} 执行成功")
+                if response.result:
+                    result_keys = list(response.result.keys()) if isinstance(response.result, dict) else "非字典结果"
+                    self.logger.info(f"   返回结果键: {result_keys}")
+                    
+                    # 显示部分关键结果信息
+                    if isinstance(response.result, dict):
+                        if "success" in response.result:
+                            self.logger.info(f"   成功标志: {response.result['success']}")
+                        if "generated_files" in response.result:
+                            files_count = len(response.result['generated_files'])
+                            self.logger.info(f"   生成文件数: {files_count}")
+                        if "errors" in response.result:
+                            errors_count = len(response.result['errors'])
+                            self.logger.info(f"   错误数量: {errors_count}")
+                        if "answer" in response.result:
+                            answer_preview = response.result['answer'][:100] + "..." if len(response.result['answer']) > 100 else response.result['answer']
+                            self.logger.info(f"   答案预览: {answer_preview}")
+            
+            # 更新Agent使用统计
+            self.stats["agent_usage"][agent_id] = self.stats["agent_usage"].get(agent_id, 0) + 1
+            
+            return response.result
+            
+        except Exception as e:
+            self.logger.error(f"❌ Agent {agent_id} 执行异常: {str(e)}")
+            # 更新Agent使用统计
+            self.stats["agent_usage"][agent_id] = self.stats["agent_usage"].get(agent_id, 0) + 1
+            raise
     
     async def handle_request(self, message: MCPMessage) -> MCPMessage:
         """处理MCP请求"""
@@ -547,8 +587,8 @@ class MCPCoordinator:
             
             self.logger.info(f"开始执行鸿蒙工作流: {session_id}")
             
-            # 使用鸿蒙工作流管理器执行
-            result = await self.harmonyos_workflow.execute_harmonyos_workflow(user_input, session_id)
+            # 使用新的协作式工作流管理器执行
+            result = await self.collaborative_workflow.execute_harmonyos_workflow(user_input, session_id)
             
             # 更新统计
             self.stats["workflow_usage"]["harmonyos_complete_development"] = \
@@ -556,13 +596,39 @@ class MCPCoordinator:
             
             self.logger.info(f"鸿蒙工作流执行完成: {session_id}")
             
+            # 改进状态判断逻辑
+            workflow_status = result.get("status", "failed")
+            final_context = result.get("final_context", {})
+            
+            # 检查是否有未解决的错误
+            has_unresolved_errors = False
+            if final_context:
+                lint_errors = len(final_context.get("lint_errors", []))
+                compile_errors = len(final_context.get("compile_errors", []))
+                has_unresolved_errors = (lint_errors > 0 or compile_errors > 0)
+            
+            # 根据实际情况确定最终状态
+            if workflow_status == "success":
+                if has_unresolved_errors:
+                    final_status = "completed_with_errors"
+                else:
+                    final_status = "completed"
+            else:
+                final_status = "failed"
+            
+            self.logger.info(f"鸿蒙工作流状态确定: {workflow_status} -> {final_status}")
+            self.logger.info(f"  lint_errors: {final_context.get('lint_errors', []) if final_context else 0}")
+            self.logger.info(f"  compile_errors: {final_context.get('compile_errors', []) if final_context else 0}")
+            self.logger.info(f"  has_unresolved_errors: {has_unresolved_errors}")
+            
             return {
                 "workflow_name": "harmonyos_complete_development",
                 "session_id": session_id,
-                "status": "completed" if result.get("status") == "success" else "failed",
+                "status": final_status,
                 "result": result,
                 "loop_count": result.get("total_iterations", 0),
-                "total_errors_fixed": result.get("total_errors_fixed", 0)
+                "total_errors_fixed": result.get("total_errors_fixed", 0),
+                "has_unresolved_errors": has_unresolved_errors
             }
             
         except Exception as e:

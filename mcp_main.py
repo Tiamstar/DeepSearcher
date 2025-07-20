@@ -23,11 +23,21 @@ from mcp_orchestrator import MCPCoordinator
 from mcp_agents.base import MCPMessage
 from shared.config_loader import ConfigLoader
 
-# 配置日志
+# 配置日志 - 设置为DEBUG级别以显示详细信息
 logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    level=logging.DEBUG,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler(sys.stdout),
+        logging.FileHandler('mcp_debug.log')
+    ]
 )
+
+# 为特定模块设置日志级别
+logging.getLogger("mcp").setLevel(logging.INFO)
+logging.getLogger("mcp.agent").setLevel(logging.INFO)
+logging.getLogger("mcp_orchestrator").setLevel(logging.INFO)
+logging.getLogger("mcp_agents").setLevel(logging.INFO)
 logger = logging.getLogger(__name__)
 
 
@@ -121,6 +131,10 @@ class MCPCli:
     
     async def _process_request(self, user_input: str) -> Dict[str, Any]:
         """处理用户请求"""
+        # 检查是否为鸿蒙请求
+        if self._is_harmonyos_request(user_input):
+            return await self._process_harmonyos_request(user_input)
+        
         # 创建MCP消息 - 修正方法名称
         message = MCPMessage(
             method="coordinator.execute_workflow",
@@ -196,9 +210,31 @@ class MCPCli:
         errors_fixed = result.get("total_errors_fixed", 0)
         
         print(f"\n🎯 鸿蒙工作流执行结果:")
-        print(f"   状态: {'✅ 成功' if status == 'success' else '❌ 失败'}")
+        # 修复状态判断 - 协调器返回的是 "completed" 而不是 "success"
+        success_statuses = ["success", "completed"]
+        warning_statuses = ["completed_with_errors"]
+        
+        if status in success_statuses:
+            status_text = "✅ 成功"
+        elif status in warning_statuses:
+            status_text = "⚠️ 完成但有错误"
+        else:
+            status_text = "❌ 失败"
+        
+        print(f"   状态: {status_text}")
         print(f"   修复循环次数: {loop_count}")
         print(f"   修复错误数量: {errors_fixed}")
+        
+        # 添加调试信息
+        print(f"   [DEBUG] 实际状态值: {status}")
+        print(f"   [DEBUG] 原始结果键: {list(result.keys())}")
+        
+        # 显示实际的工作流结果
+        workflow_result = result.get("result", {})
+        if workflow_result:
+            print(f"   [DEBUG] 工作流结果状态: {workflow_result.get('status', 'N/A')}")
+            print(f"   [DEBUG] 工作流完成: {workflow_result.get('workflow_completed', 'N/A')}")
+            print(f"   [DEBUG] 生成文件数: {workflow_result.get('generated_files', 'N/A')}")
         
         # 显示最终结果
         final_result = result.get("final_result", {})
@@ -313,6 +349,57 @@ class MCPCli:
         except Exception as e:
             logger.error(f"处理单次请求失败: {e}")
             print(f"❌ 处理失败: {e}")
+    
+    def _is_harmonyos_request(self, user_input: str) -> bool:
+        """判断是否为鸿蒙相关请求"""
+        harmonyos_keywords = [
+            "鸿蒙", "harmonyos", "arkts", "arkui", 
+            "ets", "hvigor", "codelinter", "组件",
+            "页面", "entry", "component", "ability"
+        ]
+        
+        user_input_lower = user_input.lower()
+        return any(keyword in user_input_lower for keyword in harmonyos_keywords)
+    
+    async def _process_harmonyos_request(self, user_input: str) -> Dict[str, Any]:
+        """处理鸿蒙请求"""
+        try:
+            # 使用鸿蒙专用工作流
+            message = MCPMessage(
+                method="coordinator.execute_workflow",
+                params={
+                    "workflow_name": "harmonyos_complete_development",
+                    "params": {
+                        "user_input": user_input
+                    }
+                },
+                id=f"harmonyos_{int(time.time())}"
+            )
+            
+            response = await self.coordinator.handle_request(message)
+            
+            if response.error:
+                return {
+                    "success": False,
+                    "error": response.error,
+                    "result": None,
+                    "workflow_type": "harmonyos"
+                }
+            
+            return {
+                "success": True,
+                "error": None,
+                "result": response.result,
+                "workflow_type": "harmonyos"
+            }
+            
+        except Exception as e:
+            return {
+                "success": False,
+                "error": str(e),
+                "result": None,
+                "workflow_type": "harmonyos"
+            }
 
 
 def create_web_api():
@@ -373,57 +460,6 @@ async def main():
                 sys.exit(1)
             
             await cli.single_request(args.query, args.workflow, args.language, args.output)
-    
-    def _is_harmonyos_request(self, user_input: str) -> bool:
-        """判断是否为鸿蒙相关请求"""
-        harmonyos_keywords = [
-            "鸿蒙", "harmonyos", "arkts", "arkui", 
-            "ets", "hvigor", "codelinter", "组件",
-            "页面", "entry", "component", "ability"
-        ]
-        
-        user_input_lower = user_input.lower()
-        return any(keyword in user_input_lower for keyword in harmonyos_keywords)
-    
-    async def _process_harmonyos_request(self, user_input: str) -> Dict[str, Any]:
-        """处理鸿蒙请求"""
-        try:
-            # 使用鸿蒙专用工作流
-            message = MCPMessage(
-                method="coordinator.execute_workflow",
-                params={
-                    "workflow_name": "harmonyos_complete_development",
-                    "params": {
-                        "user_input": user_input
-                    }
-                },
-                id=f"harmonyos_{int(time.time())}"
-            )
-            
-            response = await self.coordinator.handle_request(message)
-            
-            if response.error:
-                return {
-                    "success": False,
-                    "error": response.error,
-                    "result": None,
-                    "workflow_type": "harmonyos"
-                }
-            
-            return {
-                "success": True,
-                "error": None,
-                "result": response.result,
-                "workflow_type": "harmonyos"
-            }
-            
-        except Exception as e:
-            return {
-                "success": False,
-                "error": str(e),
-                "result": None,
-                "workflow_type": "harmonyos"
-            }
 
 
 if __name__ == "__main__":

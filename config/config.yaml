@@ -259,15 +259,15 @@ agents:
       planning_depth: 3
       task_timeout: 300
     
-    # === 专用LLM配置 (可选) ===
-    # 解注释下面的配置来为此Agent使用专门的LLM模型
-    # llm_override:
-    #   provider: "DeepSeek"
-    #   config:
-    #     model: "deepseek-v3"        # 使用推理能力更强的模型进行规划
-    #     api_key_env: "DEEPSEEK_API_KEY"
-    #     temperature: 0.2           # 较低温度保证规划的一致性
-    #     max_tokens: 16000          # 更大的token限制支持复杂规划
+    # === 专用LLM配置 (当前启用) ===
+    # 使用专门针对推理和规划优化的模型
+    llm_override:
+      provider: "DeepSeek"
+      config:
+        model: "deepseek-reasoner"        # 使用推理能力更强的模型进行规划
+        api_key_env: "DEEPSEEK_API_KEY"
+        temperature: 0.6           # 增加随机性以获得多样化的规划方案
+        max_tokens: 16000          # 更大的token限制支持复杂规划
 
   # -------------------------------------------------------------------
   # 代码生成Agent - 使用LLM生成代码
@@ -287,14 +287,15 @@ agents:
         - go
     
     # === 专用LLM配置 (当前启用) ===
-    # 使用专门针对代码生成优化的模型
+    # 使用Claude-3.5-Haiku进行代码生成（通过OpenAI兼容接口）
     llm_override:
-      provider: "DeepSeek"
+      provider: "OpenAI"
       config:
-        model: "deepseek-coder"       # 使用稳定的代码生成模型
-        api_key_env: "DEEPSEEK_API_KEY"
-        temperature: 0.3             # 适中温度平衡创造性和准确性
-        max_tokens: 8000
+        model: "claude-3-5-haiku-20241022"     # 使用Claude-3.5-Haiku模型
+        api_key: "sk-Wn6q91720v3CqCXV1eB6347d367240689bBf28C22a1120Dd"
+        base_url: "https://api.laozhang.ai/v1"    # 使用完整的API地址
+        temperature: 0.7                  # 增加随机性以获得多样化的代码生成
+        max_tokens: 16000                 # 更大token限制支持复杂代码生成
 
   # -------------------------------------------------------------------
   # 代码检查Agent - 不使用LLM，使用静态分析工具
@@ -326,7 +327,7 @@ agents:
     llm_override:
       provider: "DeepSeek"
       config:
-        model: "deepseek-coder"       # 使用专门的代码模型进行优化
+        model: "deepseek-reasoner"       # 使用专门的代码模型进行优化
         api_key_env: "DEEPSEEK_API_KEY"
         temperature: 0.1             # 低温度确保代码质量
         max_tokens: 8000
@@ -364,6 +365,42 @@ workflows:
       - agent: final_generator
         method: code.finalize
         timeout: 120
+
+  # 鸿蒙完整开发工作流
+  harmonyos_complete_development:
+    enabled: true
+    timeout: 1800  # 30分钟超时
+    description: 完整的鸿蒙代码生成工作流，包含6个步骤和循环修复机制
+    steps:
+      - agent: project_manager
+        method: project.analyze_harmonyos
+        timeout: 180
+        description: 分析鸿蒙项目需求和结构
+      - agent: search
+        method: search.harmonyos
+        timeout: 120
+        description: 搜索鸿蒙相关技术资料
+      - agent: code_generator
+        method: code.generate_harmonyos
+        timeout: 300
+        description: 生成鸿蒙ArkTS代码
+      - agent: code_checker
+        method: code.check.harmonyos
+        timeout: 120
+        description: 静态代码检查（仅codelinter）
+      - agent: harmonyos_compiler
+        method: compile.hvigorw
+        timeout: 180
+        description: 编译检查（hvigorw）
+      - agent: final_generator
+        method: code.finalize_harmonyos
+        timeout: 180
+        description: 生成最终优化的鸿蒙代码
+    loop_config:
+      enabled: true
+      max_iterations: 3
+      return_to_step: 2  # 返回到搜索步骤
+      failure_threshold: 2
 
 # ===================================================================
 # API服务配置
